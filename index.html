@@ -214,6 +214,44 @@
     0%,100%{box-shadow:0 0 22px 6px rgba(192,132,252,.5),inset 0 0 14px rgba(0,0,0,.95);}
     50%{box-shadow:0 0 45px 14px rgba(192,132,252,.3),inset 0 0 26px rgba(0,0,0,.99);}
   }
+  @keyframes orbit-spin {
+    from { transform: translate(-50%,-50%) rotate(0deg); }
+    to   { transform: translate(-50%,-50%) rotate(360deg); }
+  }
+  @keyframes orbit-spin-rev {
+    from { transform: translate(-50%,-50%) rotate(0deg); }
+    to   { transform: translate(-50%,-50%) rotate(-360deg); }
+  }
+
+  /* ── ORBIT RINGS ── */
+  .obj-sphere-wrap, .grid-bubble-wrap, .cmp-sphere-wrap {
+    position: relative; display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .orbit-ring {
+    position:absolute; top:50%; left:50%;
+    border-radius:50%; border-style:solid;
+    pointer-events:none; opacity:0; transition:opacity .3s;
+  }
+  .obj-sphere-wrap:hover .orbit-ring,
+  .grid-card:hover .orbit-ring,
+  .cmp-obj:hover .orbit-ring { opacity:1; }
+
+  /* ── RELATABLE FACTS ── */
+  .relatable-box {
+    margin-top:14px; padding:12px 16px;
+    background:rgba(74,240,255,.05); border:1px solid rgba(74,240,255,.18);
+    border-radius:5px;
+  }
+  .relatable-header {
+    font-family:'Orbitron',sans-serif; font-size:.52rem; letter-spacing:.18em;
+    color:var(--accent); text-transform:uppercase; margin-bottom:10px;
+  }
+  .relatable-item {
+    font-size:.64rem; color:var(--dim); line-height:1.8; padding:3px 0;
+    border-bottom:1px solid rgba(255,255,255,.04);
+  }
+  .relatable-item:last-child { border-bottom:none; }
+  .relatable-item strong { color:var(--gold); }
 </style>
 </head>
 <body>
@@ -385,6 +423,110 @@ function formatR(km) {
   return (km*1000).toFixed(1)+' m';
 }
 
+// ═══════════════════════════════════════════════════════
+//  ORBIT RINGS
+// ═══════════════════════════════════════════════════════
+function orbitRingsHTML(obj, px) {
+  if (!['planet','moon','dwarf','exoplanet'].includes(obj.type)) return '';
+  const configs = {
+    planet:   [{scale:1.55,color:'rgba(74,240,255,.55)',  w:1.5, dur:7,  rev:false},
+                {scale:1.85,color:'rgba(192,132,252,.35)',w:1,   dur:13, rev:true}],
+    moon:     [{scale:1.6, color:'rgba(148,163,184,.5)',  w:1,   dur:9,  rev:false}],
+    dwarf:    [{scale:1.5, color:'rgba(96,176,192,.45)',  w:1,   dur:11, rev:false}],
+    exoplanet:[{scale:1.6, color:'rgba(52,211,153,.5)',   w:1.5, dur:8,  rev:false},
+                {scale:2.0, color:'rgba(52,211,153,.2)',  w:1,   dur:15, rev:true}],
+  };
+  const rings = configs[obj.type] || [];
+  // Use a fixed display size for rings to keep them visible regardless of sphere px
+  const base = Math.min(Math.max(px, 30), 120);
+  return rings.map(r => {
+    const d = base * r.scale;
+    const anim = r.rev ? 'orbit-spin-rev' : 'orbit-spin';
+    return `<div class="orbit-ring" style="
+      width:${d}px;height:${d}px;
+      border:${r.w}px solid ${r.color};
+      animation:${anim} ${r.dur}s linear infinite;
+    "></div>`;
+  }).join('');
+}
+
+// wrap a sphere div + rings in a positioning wrapper
+function sphereWithRings(obj, px, anim=true) {
+  const base = Math.min(Math.max(px, 30), 120);
+  const rings = orbitRingsHTML(obj, base);
+  const extraPad = rings ? Math.ceil(base * 1.1) : 0;
+  const wrapSize = px + extraPad;
+  return `<div class="obj-sphere-wrap" style="width:${Math.max(px,wrapSize)}px;height:${Math.max(px,wrapSize)}px;">
+    <div class="obj-sphere" style="${sphereCSS(obj,px,anim)}"></div>
+    ${rings}
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════
+//  RELATABLE SIZE FACTS
+// ═══════════════════════════════════════════════════════
+const LANDMARKS = [
+  {name:'a human hair width',      km:0.00007},
+  {name:'a grain of sand',         km:0.0005},
+  {name:'a football field length', km:0.1},
+  {name:'Mt. Everest height',      km:8.849},
+  {name:'the English Channel',     km:560},
+  {name:'the diameter of Earth',   km:12742},
+  {name:'the Moon\'s diameter',    km:3474},
+  {name:'the distance Earth–Moon', km:384400},
+  {name:'the distance Earth–Sun',  km:149600000},
+];
+
+function relatableFacts(oA, oB) {
+  const larger  = oA.rKm >= oB.rKm ? oA : oB;
+  const smaller = oA.rKm <  oB.rKm ? oA : oB;
+  const largeD  = larger.rKm  * 2;
+  const smallD  = smaller.rKm * 2;
+  const facts   = [];
+
+  // How many of landmark fit across the larger object?
+  LANDMARKS.forEach(lm => {
+    const n = largeD / lm.km;
+    if (n >= 1.5 && n < 1e15) {
+      const nf = n >= 1e9 ? (n/1e9).toFixed(1)+' billion'
+               : n >= 1e6 ? (n/1e6).toFixed(1)+' million'
+               : n >= 1000 ? Math.round(n/1000).toLocaleString()+'k'
+               : Math.round(n).toLocaleString();
+      facts.push(`<span class="relatable-item">📏 <strong>${larger.name}</strong>'s diameter spans roughly <strong>${nf} × ${lm.name}</strong>.</span>`);
+    }
+  });
+
+  // How many of the smaller fit across the larger (diameter)?
+  const lineCount = largeD / smallD;
+  if (lineCount >= 2) {
+    const lf = lineCount >= 1e6 ? (lineCount/1e6).toFixed(1)+' million'
+             : lineCount >= 1000 ? Math.round(lineCount).toLocaleString()
+             : lineCount.toFixed(1);
+    facts.push(`<span class="relatable-item">🔢 You could line up roughly <strong>${lf} copies</strong> of <strong>${smaller.name}</strong> across <strong>${larger.name}</strong>'s diameter.</span>`);
+  }
+
+  // Light travel time across the larger object
+  const lightSec = largeD / 299792;
+  if (lightSec >= 0.001) {
+    const lt = lightSec >= 3600 ? (lightSec/3600).toFixed(2)+' hours'
+             : lightSec >= 60   ? (lightSec/60).toFixed(1)+' minutes'
+             : lightSec >= 1    ? lightSec.toFixed(2)+' seconds'
+             : (lightSec*1000).toFixed(1)+' milliseconds';
+    facts.push(`<span class="relatable-item">⚡ Light takes about <strong>${lt}</strong> to travel across <strong>${larger.name}</strong>.</span>`);
+  }
+
+  // Surface area comparison
+  const saRatio = (larger.rKm / smaller.rKm) ** 2;
+  if (saRatio >= 4) {
+    const sf = saRatio >= 1e6 ? (saRatio/1e6).toFixed(1)+' million'
+             : saRatio >= 1000 ? Math.round(saRatio).toLocaleString()
+             : saRatio.toFixed(1);
+    facts.push(`<span class="relatable-item">🌐 <strong>${larger.name}</strong>'s surface area is about <strong>${sf}×</strong> that of <strong>${smaller.name}</strong>.</span>`);
+  }
+
+  return facts.slice(0,4); // cap at 4 facts
+}
+
 function sphereCSS(obj, px, anim=true) {
   const s=`width:${px}px;height:${px}px;`;
   if (obj.type==='blackhole')
@@ -432,7 +574,7 @@ function buildScaleView(oA, oB) {
     col.className = 'obj-col';
     col.style.minWidth = Math.max(px + 24, 100) + 'px';
     col.innerHTML = `
-      <div class="obj-sphere" style="${sphereCSS(obj,px)}"></div>
+      ${sphereWithRings(obj,px,true)}
       <div class="obj-col-label">
         <div class="obj-col-name">${obj.name}</div>
         <div class="obj-col-type" style="color:${typeColor(obj.type)}">${obj.type}</div>
@@ -477,14 +619,14 @@ function runCompare() {
 
   document.getElementById('cmpObjects').innerHTML = `
     <div class="cmp-obj">
-      <div class="cmp-sphere" style="${sphereCSS(oA,Math.max(sA,MIN_CMP))}"></div>
+      ${sphereWithRings(oA, Math.max(sA,MIN_CMP), true)}
       <div class="cmp-name">${oA.name}</div>
       <div class="cmp-stat">${formatR(oA.rKm)} radius</div>
       <div class="speak-btn" style="margin-top:5px" onclick="speak('${oA.pron}',event)">🔊</div>
     </div>
     <div class="cmp-vs">VS</div>
     <div class="cmp-obj">
-      <div class="cmp-sphere" style="${sphereCSS(oB,Math.max(sB,MIN_CMP))}"></div>
+      ${sphereWithRings(oB, Math.max(sB,MIN_CMP), true)}
       <div class="cmp-name">${oB.name}</div>
       <div class="cmp-stat">${formatR(oB.rKm)} radius</div>
       <div class="speak-btn" style="margin-top:5px" onclick="speak('${oB.pron}',event)">🔊</div>
@@ -513,6 +655,18 @@ function runCompare() {
 
   document.getElementById('cmpDesc').innerHTML =
     `<strong>${oA.name}:</strong> ${oA.desc}<br><br><strong>${oB.name}:</strong> ${oB.desc}${extra}`;
+
+  // Relatable facts
+  const facts = relatableFacts(oA, oB);
+  const existingBox = document.getElementById('relatableBox');
+  if (existingBox) existingBox.remove();
+  if (facts.length) {
+    const box = document.createElement('div');
+    box.id = 'relatableBox';
+    box.className = 'relatable-box';
+    box.innerHTML = `<div class="relatable-header">📐 Put it in perspective</div>${facts.join('')}`;
+    document.getElementById('cmpPanel').appendChild(box);
+  }
 
   document.getElementById('scaleNote').textContent =
     ratio > 200
@@ -565,8 +719,12 @@ function renderGrid() {
     const sz=10+((lv-lMin)/lR)*44;
     const card=document.createElement('div');
     card.className='grid-card'+(gridSelA===obj.id?' sel-a':gridSelB===obj.id?' sel-b':'');
+    const bsz = Math.max(sz,8);
     card.innerHTML=`
-      <div class="grid-bubble" style="${sphereCSS(obj,Math.max(sz,8),false)}"></div>
+      <div class="grid-bubble-wrap" style="width:${bsz+40}px;height:${bsz+40}px;">
+        <div class="grid-bubble" style="${sphereCSS(obj,bsz,false)}"></div>
+        ${orbitRingsHTML(obj, bsz)}
+      </div>
       <div class="grid-name">${obj.name}</div>
       <div class="grid-type" style="color:${typeColor(obj.type)}">${obj.type}</div>
       <div class="grid-speak" onclick="speak('${obj.pron}',event)">🔊</div>`;
